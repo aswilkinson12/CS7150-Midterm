@@ -9,7 +9,8 @@ import config as cfg
 
 from models.hab_inpaint import HABInpaintModel
 from utils.data_loader import create_dataloaders
-from losses import DistanceWeightedComboLoss, masked_ssim
+from losses import SimpleMaskedL1Loss
+
 
 def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
     """Train for one epoch."""
@@ -17,7 +18,6 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
 
     running_loss = 0.0
     running_l1 = 0.0
-    running_ssim_loss = 0.0
     n_batches = 0
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1} [Train]")
@@ -47,25 +47,21 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
         # Track metrics
         running_loss += loss.item()
         running_l1 += loss_dict['l1']
-        running_ssim_loss += loss_dict['ssim']
         n_batches += 1
 
         # Update progress bar
         pbar.set_postfix({
             'loss': f"{loss.item():.4f}",
             'l1': f"{loss_dict['l1']:.4f}",
-            'ssim_loss': f"{loss_dict['ssim']:.4f}"
         })
 
     # Average metrics
     avg_loss = running_loss / n_batches
     avg_l1 = running_l1 / n_batches
-    avg_ssim_loss = running_ssim_loss / n_batches
 
     return {
         'loss': avg_loss,
         'l1': avg_l1,
-        'ssim_loss': avg_ssim_loss
     }
 
 
@@ -75,8 +71,6 @@ def validate(model, dataloader, criterion, device, epoch):
 
     running_loss = 0.0
     running_l1 = 0.0
-    running_ssim_loss = 0.0
-    running_ssim_score = 0.0
     n_batches = 0
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1} [Val]")
@@ -94,33 +88,23 @@ def validate(model, dataloader, criterion, device, epoch):
             # Compute loss
             loss, loss_dict = criterion(pred, y, mask, dist_weights)
 
-            # Compute SSIM score (higher is better)
-            ssim_loss = masked_ssim(pred, y, mask, window_size=cfg.SSIM_WIN)
-            ssim_score = 1.0 - ssim_loss
 
             # Track metrics
             running_loss += loss.item()
             running_l1 += loss_dict['l1']
-            running_ssim_loss += loss_dict['ssim']
-            running_ssim_score += ssim_score.item()
             n_batches += 1
 
             pbar.set_postfix({
-                'loss': f"{loss.item():.4f}",
-                'ssim': f"{ssim_score.item():.4f}"
+                'loss': f"{loss.item():.4f}"
             })
 
     # Average metrics
     avg_loss = running_loss / n_batches
     avg_l1 = running_l1 / n_batches
-    avg_ssim_loss = running_ssim_loss / n_batches
-    avg_ssim_score = running_ssim_score / n_batches
 
     return {
         'loss': avg_loss,
         'l1': avg_l1,
-        'ssim_loss': avg_ssim_loss,
-        'ssim_score': avg_ssim_score
     }
 
 
@@ -160,7 +144,7 @@ def main(args):
     # Create model
     print("\nInitializing model...")
     model = HABInpaintModel(
-        input_channels=8,
+        input_channels=cfg.INPUT_CHANNELS,
         hidden_dims=cfg.HIDDEN_DIMS,
         kernel_size=cfg.KERNEL_SIZE
     ).to(device)
@@ -170,11 +154,7 @@ def main(args):
     print(f"Model parameters: {n_params:,}")
 
     # Create loss function
-    criterion = DistanceWeightedComboLoss(
-        alpha=cfg.ALPHA,
-        ssim_window=cfg.SSIM_WIN,
-        use_dist_weights=cfg.USE_DIST_WEIGHT
-    ).to(device)
+    criterion = SimpleMaskedL1Loss()
 
     # Create optimizer
     optimizer = optim.Adam(
@@ -190,7 +170,7 @@ def main(args):
     print("\nStarting training...")
     print("=" * 70)
 
-    best_ssim = 0.0
+    best_l1 = float('inf')
     patience = 10
     patience_counter = 0
 
@@ -217,11 +197,8 @@ def main(args):
             'lr': current_lr,
             'train_loss': train_metrics['loss'],
             'train_l1': train_metrics['l1'],
-            'train_ssim_loss': train_metrics['ssim_loss'],
             'val_loss': val_metrics['loss'],
-            'val_l1': val_metrics['l1'],
-            'val_ssim_loss': val_metrics['ssim_loss'],
-            'val_ssim_score': val_metrics['ssim_score']
+            'val_l1': val_metrics['l1']
         }
         log_data.append(log_entry)
 
@@ -229,21 +206,21 @@ def main(args):
         print(f"\nEpoch {epoch + 1}/{EPOCHS}")
         print(f"  LR: {current_lr:.6f}")
         print(f"  Train - Loss: {train_metrics['loss']:.4f}, L1: {train_metrics['l1']:.4f}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, SSIM: {val_metrics['ssim_score']:.4f}")
+        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, L1: {val_metrics['l1']:.4f}")
 
         # Save checkpoint
         checkpoint_path = os.path.join(cfg.CHECKPOINT_DIR, f"model_epoch_{epoch + 1:03d}.pt")
         save_checkpoint(model, optimizer, epoch, val_metrics, checkpoint_path)
 
-        # Early stopping based on SSIM score
-        if val_metrics['ssim_score'] > best_ssim:
-            best_ssim = val_metrics['ssim_score']
+        # Early stopping based on loss score
+        if val_metrics['l1'] < best_l1:
+            best_l1 = val_metrics['l1']
             patience_counter = 0
 
             # Save best model
             best_path = os.path.join(cfg.CHECKPOINT_DIR, "model_best.pt")
             save_checkpoint(model, optimizer, epoch, val_metrics, best_path)
-            print(f"  ★ New best SSIM: {best_ssim:.4f}")
+            print(f"  ★ New best L1: {best_l1:.4f}")
         else:
             patience_counter += 1
             print(f"  Patience: {patience_counter}/{patience}")
@@ -261,7 +238,7 @@ def main(args):
     log_df.to_csv(log_path, index=False)
     print(f"\nTraining log saved to: {log_path}")
 
-    print(f"\n✓ Training complete! Best val SSIM: {best_ssim:.4f}")
+    print(f"\n Training complete! Best val L1: {best_l1:.4f}")
 
 
 if __name__ == "__main__":
