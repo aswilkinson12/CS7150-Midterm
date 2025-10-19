@@ -12,6 +12,10 @@ import torch
 from datetime import timedelta
 from scipy.ndimage import distance_transform_edt, gaussian_filter
 import config as cfg
+import warnings
+from rasterio.errors import NotGeoreferencedWarning
+
+warnings.filterwarnings('ignore', category=NotGeoreferencedWarning)
 
 
 def read_image(path):
@@ -19,9 +23,10 @@ def read_image(path):
     Read GeoTIFF with Lake Erie crop.
     Matches baseline_opencv_inpaint.py cropping logic exactly.
     """
-    with rio.open(path) as src:
-        dn = src.read(1).astype(np.float32)
-
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=NotGeoreferencedWarning)
+        with rio.open(path) as src:
+            dn = src.read(1).astype(np.float32)
     return dn
 
 
