@@ -1,8 +1,3 @@
-"""
-SIMPLIFIED data loader for HAB inpainting with synthetic masks.
-NO CROPPING - uses full image.
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -19,10 +14,7 @@ warnings.filterwarnings('ignore', category=NotGeoreferencedWarning)
 
 
 def read_image(path):
-    """
-    Read GeoTIFF with Lake Erie crop.
-    Matches baseline_opencv_inpaint.py cropping logic exactly.
-    """
+    """Read GeoTIFF."""
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=NotGeoreferencedWarning)
         with rio.open(path) as src:
@@ -96,7 +88,7 @@ def normalize_robust(image, mask):
 
 
 class HABInpaintDataset(Dataset):
-    """Dataset with synthetic masks."""
+    """Dataset with cloud filtering and synthetic masks."""
 
     def __init__(self, index_df, split='train'):
         self.split = split
@@ -108,9 +100,13 @@ class HABInpaintDataset(Dataset):
         print(f"[{split}] {len(self.samples)} samples")
 
     def _build_samples(self):
-        """Build sample list - skip if temporal gaps are too large."""
+        """Build sample list - filter cloudy targets, keep cloudy neighbors."""
         samples = []
         dates_dict = dict(zip(self.index['date'], self.index['path']))
+
+        skipped_cloudy = 0
+        skipped_water = 0
+        skipped_gaps = 0
 
         for idx, row in self.index.iterrows():
             target_date = row['date']
@@ -122,26 +118,32 @@ class HABInpaintDataset(Dataset):
 
             try:
                 dn = read_image(full_path)
-                # Water = NOT land (DN < 254)
-                water_mask = (dn < 254)
 
-                if water_mask.sum() < cfg.MIN_WATER_PIXELS:
-                    # print(f"  Skipping {target_path}: only {water_mask.sum()} water pixels")
+                # Water mask (DN < 254)
+                water_mask = (dn < 254)
+                cloud_mask = (dn == 255)
+
+                # FILTER 1: Skip if target is too cloudy (>95%)
+                cloud_coverage = cloud_mask.sum() / dn.size
+                if cloud_coverage > 0.95:
+                    skipped_cloudy += 1
+                    continue
+
+                # FILTER 2: Skip if not enough visible water
+                visible_water = water_mask & ~cloud_mask
+                if visible_water.sum() < cfg.MIN_WATER_PIXELS:
+                    skipped_water += 1
                     continue
 
             except Exception as e:
-                # print(f"  Error reading {target_path}: {e}")
                 continue
 
-            # Find neighbors with gap checking
+            # Find temporal neighbors (can be cloudy - that's OK!)
             neighbors = []
             present_bits = []
             has_large_gap = False
 
             for offset in range(-cfg.LOOKBACK, 0):
-                if offset == 0:
-                    continue
-
                 neighbor_date = target_date + timedelta(days=offset)
 
                 # Check if neighbor exists
@@ -164,20 +166,22 @@ class HABInpaintDataset(Dataset):
                         neighbors.append(dates_dict[closest_date])
                         present_bits.append(1.0)
                     else:
-                        # Gap too large or no data available
+                        # Gap too large
                         neighbors.append(None)
                         present_bits.append(0.0)
 
-                        # If this is a critical neighbor (t±1), skip sample
-                        if abs(offset) <= 1:  # t-1 or t+1 missing with large gap
+                        # If critical neighbor missing
+                        if abs(offset) <= 1:
                             has_large_gap = True
 
-            # Skip if immediate neighbors have large gaps
+            # FILTER 3: Skip if temporal gaps too large
             if has_large_gap:
+                skipped_gaps += 1
                 continue
 
-            # Also skip if too many neighbors are missing (need at least 3 out of 6)
+            # FILTER 4: Need at least 3 neighbors
             if sum(present_bits) < 3:
+                skipped_gaps += 1
                 continue
 
             samples.append({
@@ -185,6 +189,14 @@ class HABInpaintDataset(Dataset):
                 'neighbors': neighbors,
                 'present_bits': present_bits
             })
+
+        # Print filtering summary
+        if self.split == 'train':
+            print(f"\n  Filtering summary:")
+            print(f"    Skipped (>95% cloudy): {skipped_cloudy}")
+            print(f"    Skipped (low water): {skipped_water}")
+            print(f"    Skipped (temporal gaps): {skipped_gaps}")
+            print(f"    Kept: {len(samples)}\n")
 
         return samples
 
@@ -200,12 +212,12 @@ class HABInpaintDataset(Dataset):
         # Water mask (DN < 254)
         water_mask = (target_dn < 254)
 
-        # Generate synthetic cloud mask
+        # Generate synthetic cloud mask (only on visible water)
         synth_mask = generate_synthetic_mask(
             target_dn.shape, water_mask, cfg.SYNTH_MASK_COVERAGE
         )
 
-        # Load neighbors
+        # Load neighbors (these CAN be cloudy - model learns to handle it)
         neighbor_frames = []
         for neighbor_path, present in zip(sample['neighbors'], sample['present_bits']):
             if present and neighbor_path:
@@ -227,7 +239,6 @@ class HABInpaintDataset(Dataset):
         max_x = W - cfg.PATCH_SIZE
 
         if max_y <= 0 or max_x <= 0:
-            # Image too small
             py, px = 0, 0
         else:
             py = np.random.randint(0, max_y) if self.split == 'train' else max_y // 2
