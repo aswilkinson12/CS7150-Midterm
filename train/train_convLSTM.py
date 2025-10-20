@@ -1,17 +1,3 @@
-
-'''
-data_root = Path("data_imgs/light_cloud")  # or light_cloud if that’s ready
-loader = get_dataloader(data_root, batch_size=2, seq_len=3)
-
-x, y = next(iter(loader))
-print("x:", x.shape, "y:", y.shape)
-
-# Check model output
-model = ConvLSTM(input_dim=3, hidden_dim=32, kernel_size=(3,3), n_layers=2)
-output, states = model(x)
-print("Model output:", output[0].shape)
-'''
-
 import torch
 import torch.nn as nn
 from torch.utils.data import random_split, DataLoader
@@ -26,15 +12,10 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoise
 def train():
     # configuration
     DATA_DIR = Path("data_imgs/habs_month_images")
-    SEQ_LEN = 5
-    HIDDEN_DIM = 64
-    N_LAYERS = 3
-    LR = 1e-3
-    WEIGHT_DECAY = 1e-5
+    SEQ_LEN = 3
+    BATCH_SIZE = 1
     EPOCHS = 5
-    BATCH_SIZE = 4
-    CRITERION = MSSIMLoss(alpha=0.8)
-
+    LR = 1e-3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # dataset split
