@@ -9,7 +9,7 @@ NUM_WORKERS = 4
 
 # dodel configuration
 INPUT_DIM = 3
-HIDDEN_DIM = 64
+HIDDEN_DIM = 128
 N_LAYERS = 3
 KERNEL_SIZE = (3, 3)
 

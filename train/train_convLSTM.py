@@ -31,6 +31,8 @@ def train():
     # metrics 
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=255).to(DEVICE)
     psnr_metric = PeakSignalNoiseRatio(data_range=255).to(DEVICE)
+    
+    best_val_loss = float('inf')
 
     for epoch in range(EPOCHS):
         # train
@@ -51,7 +53,6 @@ def train():
         # validation
         model.eval()
         val_loss, val_ssim, val_psnr = 0.0, 0.0, 0.0
-        best_val_loss = float('inf')
         with torch.no_grad():
             for x, y in tqdm(val_loader, desc=f"Val Epoch {epoch+1}"):
                 x, y = x.to(DEVICE), y.to(DEVICE)
