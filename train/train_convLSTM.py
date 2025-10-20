@@ -32,11 +32,6 @@ def train():
     LR = 1e-3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # metrics 
-    ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(DEVICE)
-    psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(DEVICE)
-
-
     # dataset split
     full_dataset = SatelliteSequenceDataset(DATA_DIR, seq_len=SEQ_LEN)
     train_size = int(0.8 * len(full_dataset))
@@ -50,6 +45,10 @@ def train():
     model = ConvLSTM_Predictor(input_dim=3, hidden_dim=32, kernel_size=(3,3), n_layers=2).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LR)
+
+    # metrics 
+    ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(DEVICE)
+    psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(DEVICE)
 
     for epoch in range(EPOCHS):
         # train
@@ -76,8 +75,12 @@ def train():
                 y_pred = model(x)
                 loss = criterion(y_pred, y)
                 val_loss += loss.item()
-                val_ssim += ssim_metric(y_pred, y).item()
-                val_psnr += psnr_metric(y_pred, y).item()
+
+                ssim_val = ssim_metric(y_pred.to(DEVICE), y.to(DEVICE))
+                psnr_val = psnr_metric(y_pred.to(DEVICE), y.to(DEVICE))
+
+                val_ssim += ssim_val.item()
+                val_psnr += psnr_val.item()
 
         n_val = len(val_loader)
         avg_val_loss = val_loss / n_val
