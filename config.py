@@ -23,4 +23,5 @@ DROPOUT = 0.1
 
 # paths
 CHECKPOINT_DIR = Path("checkpoints")
+CHECKPOINT = CHECKPOINT_DIR / "convlstm_best.pth"
 RESULTS_DIR = Path("results")

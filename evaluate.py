@@ -1,6 +1,7 @@
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import torch
+from config import *
 import matplotlib.pyplot as plt
 from pathlib import Path
 from train.data_loader import get_dataloader
@@ -13,14 +14,11 @@ def evaluate(y_true, y_pred):
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    data_dir = Path("data_imgs/habs_month_images")
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
 
-    loader = get_dataloader(data_dir, batch_size=1, seq_len=3, num_workers=0)
+    loader = get_dataloader(DATA_DIR, batch_size=BATCH_SIZE, seq_len=SEQ_LEN, num_workers=NUM_WORKERS)
 
-    model = ConvLSTM_Predictor(input_dim=3, hidden_dim=32, kernel_size=(3,3), n_layers=2).to(device)
-    model.load_state_dict(torch.load("checkpoints/convlstm_epoch3.pth", map_location=device))
+    model = ConvLSTM_Predictor(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM, kernel_size=KERNEL_SIZE, n_layers=N_LAYERS).to(device)
+    model.load_state_dict(torch.load(CHECKPOINT, map_location=device))
     model.eval()
 
     total_ssim, total_psnr, n = 0.0, 0.0, 0
@@ -58,12 +56,12 @@ def main():
                 plt.axis("off")
 
                 plt.tight_layout()
-                save_path = results_dir / f"sample_{idx+1}.png"
+                save_path = RESULTS_DIR / f"sample_{idx+1}.png"
                 plt.savefig(save_path, dpi=150)
                 plt.close()
 
     print(f"Avg SSIM: {total_ssim/n:.3f}, Avg PSNR: {total_psnr/n:.2f} dB")
-    print(f"Saved example images to {results_dir.resolve()}/")
+    print(f"Saved example images to {RESULTS_DIR.resolve()}/")
     
 
 if __name__ == "__main__":

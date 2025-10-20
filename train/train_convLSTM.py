@@ -6,16 +6,12 @@ from pathlib import Path
 from train.data_loader import SatelliteSequenceDataset
 from models.convlstm import ConvLSTM, ConvLSTM_Predictor
 from tqdm import tqdm
+from config import *
 from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
 
 
 def train():
     # configuration
-    DATA_DIR = Path("data_imgs/habs_month_images")
-    SEQ_LEN = 3
-    BATCH_SIZE = 1
-    EPOCHS = 5
-    LR = 1e-3
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # dataset split
@@ -24,11 +20,11 @@ def train():
     val_size = len(full_dataset) - train_size
     train_set, val_set = random_split(full_dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
+    val_loader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=NUM_WORKERS)
 
     # model + loss + optimizer
-    model = ConvLSTM_Predictor(input_dim=3, hidden_dim=32, kernel_size=(3,3), n_layers=2).to(DEVICE)
+    model = ConvLSTM_Predictor(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM, kernel_size=KERNEL_SIZE, n_layers=N_LAYERS).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
@@ -77,8 +73,10 @@ def train():
               f"Val Loss: {avg_val_loss:.4f} | SSIM: {avg_val_ssim:.3f} | PSNR: {avg_val_psnr:.2f}")
 
         # save checkpoint
-        Path("checkpoints").mkdir(exist_ok=True)
-        torch.save(model.state_dict(), f"checkpoints/convlstm_epoch{epoch+1}.pth")
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), CHECKPOINT_DIR / "convlstm_best.pth")
+            print(f" Saved new best model (Val Loss: {best_val_loss:.4f})")
 
 
 if __name__ == "__main__":
