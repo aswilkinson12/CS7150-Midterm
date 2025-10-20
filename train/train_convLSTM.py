@@ -26,12 +26,11 @@ def train():
     # model + loss + optimizer
     model = ConvLSTM_Predictor(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM, kernel_size=KERNEL_SIZE, n_layers=N_LAYERS).to(DEVICE)
     criterion = lambda pred, target: 0.8 * nn.L1Loss()(pred, target) + 0.2 * (1 - ssim_metric(pred, target))
-
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
     # metrics 
-    ssim_metric = StructuralSimilarityIndexMeasure(data_range=255.0)
-    psnr_metric = PeakSignalNoiseRatio(data_range=255.0)
+    ssim_metric = StructuralSimilarityIndexMeasure(data_range=255).to(DEVICE)
+    psnr_metric = PeakSignalNoiseRatio(data_range=255).to(DEVICE)
 
     for epoch in range(EPOCHS):
         # train
