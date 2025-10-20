@@ -26,10 +26,15 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoise
 def train():
     # configuration
     DATA_DIR = Path("data_imgs/habs_month_images")
-    SEQ_LEN = 3
-    BATCH_SIZE = 1
-    EPOCHS = 5
+    SEQ_LEN = 5
+    HIDDEN_DIM = 64
+    N_LAYERS = 3
     LR = 1e-3
+    WEIGHT_DECAY = 1e-5
+    EPOCHS = 5
+    BATCH_SIZE = 4
+    CRITERION = MSSIMLoss(alpha=0.8)
+
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     # dataset split
