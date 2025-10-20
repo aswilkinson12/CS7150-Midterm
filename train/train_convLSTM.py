@@ -25,7 +25,7 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoise
 
 def train():
     # configuration
-    DATA_DIR = Path("data_imgs/hab_month_images")
+    DATA_DIR = Path("data_imgs/habs_month_images")
     SEQ_LEN = 3
     BATCH_SIZE = 1
     EPOCHS = 5
