@@ -25,12 +25,13 @@ def train():
 
     # model + loss + optimizer
     model = ConvLSTM_Predictor(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM, kernel_size=KERNEL_SIZE, n_layers=N_LAYERS).to(DEVICE)
-    criterion = nn.MSELoss()
+    criterion = lambda pred, target: 0.8 * nn.L1Loss()(pred, target) + 0.2 * (1 - ssim_metric(pred, target))
+
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
     # metrics 
-    ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(DEVICE)
-    psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(DEVICE)
+    ssim_metric = StructuralSimilarityIndexMeasure(data_range=255.0)
+    psnr_metric = PeakSignalNoiseRatio(data_range=255.0)
 
     for epoch in range(EPOCHS):
         # train
@@ -51,7 +52,7 @@ def train():
         # validation
         model.eval()
         val_loss, val_ssim, val_psnr = 0.0, 0.0, 0.0
-        best_val_loss = float('-inf')
+        best_val_loss = float('inf')
         with torch.no_grad():
             for x, y in tqdm(val_loader, desc=f"Val Epoch {epoch+1}"):
                 x, y = x.to(DEVICE), y.to(DEVICE)
@@ -59,8 +60,8 @@ def train():
                 loss = criterion(y_pred, y)
                 val_loss += loss.item()
 
-                ssim_val = ssim_metric(y_pred.detach().cpu(), y.detach().cpu())
-                psnr_val = psnr_metric(y_pred.detach().cpu(), y.detach().cpu())
+                ssim_val = ssim_metric(y_pred, y)
+                psnr_val = psnr_metric(y_pred, y)
 
                 val_ssim += ssim_val.item()
                 val_psnr += psnr_val.item()
