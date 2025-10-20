@@ -16,7 +16,7 @@ def main():
     loader = get_dataloader(data_dir, batch_size=1, seq_len=3, num_workers=0)
 
     model = ConvLSTM_Predictor(input_dim=3, hidden_dim=32, kernel_size=(3,3), n_layers=2).to(device)
-    model.load_state_dict(torch.load("checkpoints/convlstm_best.pth", map_location=device))
+    model.load_state_dict(torch.load("checkpoints/convlstm_epoch3.pth", map_location=device))
     model.eval()
 
     total_ssim, total_psnr, n = 0.0, 0.0, 0
