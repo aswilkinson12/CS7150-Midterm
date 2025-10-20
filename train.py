@@ -7,7 +7,7 @@ from tqdm import tqdm
 import argparse
 import config as cfg
 
-from models.hab_inpaint import HABInpaintModel
+from models.convlstm import HABInpaintModel
 from utils.data_loader import create_dataloaders
 from losses import SimpleMaskedL1Loss
 

@@ -60,7 +60,7 @@ df.loc[train_end:val_end, 'split'] = 'val'
 
 # Print summary
 print("\n" + "="*50)
-print(f"✓ Processed {len(df)} files")
+print(f"Processed {len(df)} files")
 print(f"\nDate range: {df['date'].min()} → {df['date'].max()}")
 print(f"Years: {sorted(df['year'].unique())}")
 print(f"Months: {sorted(df['month'].unique())}")
@@ -70,6 +70,6 @@ print("="*50)
 
 # Save
 df.to_csv('../data/index.csv', index=False)
-print(f"\n✓ Saved to data/index.csv")
+print(f"\nSaved to data/index.csv")
 print(f"\nFirst few rows:")
 print(df.head())
