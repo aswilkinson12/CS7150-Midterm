@@ -8,7 +8,7 @@ from models.convlstm import ConvLSTM_Predictor
 def evaluate(y_true, y_pred):
     y_true = y_true.detach().cpu().numpy().transpose(1,2,0)
     y_pred = y_pred.detach().cpu().numpy().transpose(1,2,0)
-    return ssim(y_true, y_pred, channel_axis=2), psnr(y_true, y_pred)
+    return ssim(y_true, y_pred, channel_axis=2, data_range=1.0), psnr(y_true, y_pred)
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
