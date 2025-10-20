@@ -76,8 +76,8 @@ def train():
                 loss = criterion(y_pred, y)
                 val_loss += loss.item()
 
-                ssim_val = ssim_metric(y_pred.to(DEVICE), y.to(DEVICE))
-                psnr_val = psnr_metric(y_pred.to(DEVICE), y.to(DEVICE))
+                ssim_val = ssim_metric(y_pred.detach().cpu(), y.detach().cpu())
+                psnr_val = psnr_metric(y_pred.detach().cpu(), y.detach().cpu())
 
                 val_ssim += ssim_val.item()
                 val_psnr += psnr_val.item()
