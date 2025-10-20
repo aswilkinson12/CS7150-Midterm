@@ -51,6 +51,7 @@ def train():
         # validation
         model.eval()
         val_loss, val_ssim, val_psnr = 0.0, 0.0, 0.0
+        best_val_loss = float('-inf')
         with torch.no_grad():
             for x, y in tqdm(val_loader, desc=f"Val Epoch {epoch+1}"):
                 x, y = x.to(DEVICE), y.to(DEVICE)

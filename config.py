@@ -1,7 +1,7 @@
 from pathlib import Path
 
 # dataset & dataLoader
-DATA_DIR = Path("data_imgs/habs_month_images")    
+DATA_DIR = Path("raw")    
 SEQ_LEN = 3
 IMG_SIZE = (256, 256)   
 BATCH_SIZE = 4       
