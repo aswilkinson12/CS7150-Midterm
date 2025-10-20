@@ -1,15 +1,18 @@
+"""
+train.py - Training script for HAB prediction
+"""
+
 import os
 import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import pandas as pd
 from tqdm import tqdm
-import argparse
 import config as cfg
 
-from models.convlstm import HABInpaintModel
+from models.convlstm import HABInpaintModel  # Model stays the same!
 from utils.data_loader import create_dataloaders
-from losses import SimpleMaskedL1Loss
+from losses import WaterMaskedMSELoss
 
 
 def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
@@ -17,23 +20,23 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
     model.train()
 
     running_loss = 0.0
-    running_l1 = 0.0
+    running_mse = 0.0
+    running_mae = 0.0
     n_batches = 0
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1} [Train]")
 
-    for x, y, mask, dist_weights in pbar:
+    for x, y, water_mask in pbar:
         # Move to device
-        x = x.to(device)  # [B, T=6, C=8, H, W]
+        x = x.to(device)  # [B, T=5, C=6, H, W]
         y = y.to(device)  # [B, 1, H, W]
-        mask = mask.to(device)  # [B, 1, H, W]
-        dist_weights = dist_weights.to(device)  # [B, 1, H, W]
+        water_mask = water_mask.to(device)  # [B, 1, H, W]
 
         # Forward pass
         pred = model(x)  # [B, 1, H, W]
 
         # Compute loss
-        loss, loss_dict = criterion(pred, y, mask, dist_weights)
+        loss, loss_dict = criterion(pred, y, water_mask)
 
         # Backward pass
         optimizer.zero_grad()
@@ -46,22 +49,25 @@ def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
 
         # Track metrics
         running_loss += loss.item()
-        running_l1 += loss_dict['l1']
+        running_mse += loss_dict.get('mse', loss.item())
+        running_mae += loss_dict.get('mae', 0.0)
         n_batches += 1
 
         # Update progress bar
         pbar.set_postfix({
             'loss': f"{loss.item():.4f}",
-            'l1': f"{loss_dict['l1']:.4f}",
+            'mae': f"{loss_dict.get('mae', 0.0):.4f}",
         })
 
     # Average metrics
     avg_loss = running_loss / n_batches
-    avg_l1 = running_l1 / n_batches
+    avg_mse = running_mse / n_batches
+    avg_mae = running_mae / n_batches
 
     return {
         'loss': avg_loss,
-        'l1': avg_l1,
+        'mse': avg_mse,
+        'mae': avg_mae,
     }
 
 
@@ -70,28 +76,28 @@ def validate(model, dataloader, criterion, device, epoch):
     model.eval()
 
     running_loss = 0.0
-    running_l1 = 0.0
+    running_mse = 0.0
+    running_mae = 0.0
     n_batches = 0
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1} [Val]")
 
     with torch.no_grad():
-        for x, y, mask, dist_weights in pbar:
+        for x, y, water_mask in pbar:
             x = x.to(device)
             y = y.to(device)
-            mask = mask.to(device)
-            dist_weights = dist_weights.to(device)
+            water_mask = water_mask.to(device)
 
             # Forward pass
             pred = model(x)
 
             # Compute loss
-            loss, loss_dict = criterion(pred, y, mask, dist_weights)
-
+            loss, loss_dict = criterion(pred, y, water_mask)
 
             # Track metrics
             running_loss += loss.item()
-            running_l1 += loss_dict['l1']
+            running_mse += loss_dict.get('mse', loss.item())
+            running_mae += loss_dict.get('mae', 0.0)
             n_batches += 1
 
             pbar.set_postfix({
@@ -100,11 +106,13 @@ def validate(model, dataloader, criterion, device, epoch):
 
     # Average metrics
     avg_loss = running_loss / n_batches
-    avg_l1 = running_l1 / n_batches
+    avg_mse = running_mse / n_batches
+    avg_mae = running_mae / n_batches
 
     return {
         'loss': avg_loss,
-        'l1': avg_l1,
+        'mse': avg_mse,
+        'mae': avg_mae,
     }
 
 
@@ -119,7 +127,7 @@ def save_checkpoint(model, optimizer, epoch, metrics, path):
     print(f"Saved checkpoint: {path}")
 
 
-def main(args):
+def main():
     """Main training function."""
 
     # Create output directories
@@ -127,14 +135,14 @@ def main(args):
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
 
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = cfg.DEVICE
     print(f"Using device: {device}")
 
     # Create dataloaders
     print("\nLoading data...")
     loaders = create_dataloaders(
-        index_csv=INDEX_CSV,
-        batch_size=BATCH_SIZE,
+        index_csv=cfg.INDEX_CSV,
+        batch_size=cfg.BATCH_SIZE,
         num_workers=4
     )
 
@@ -154,29 +162,29 @@ def main(args):
     print(f"Model parameters: {n_params:,}")
 
     # Create loss function
-    criterion = SimpleMaskedL1Loss()
+    criterion = WaterMaskedMSELoss()
 
     # Create optimizer
     optimizer = optim.Adam(
         model.parameters(),
-        lr=LR,
+        lr=cfg.LR,
         weight_decay=cfg.WEIGHT_DECAY
     )
 
     # Create learning rate scheduler
-    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS)
+    scheduler = CosineAnnealingLR(optimizer, T_max=cfg.EPOCHS)
 
     # Training loop
     print("\nStarting training...")
     print("=" * 70)
 
-    best_l1 = float('inf')
+    best_loss = float('inf')
     patience = 10
     patience_counter = 0
 
     log_data = []
 
-    for epoch in range(EPOCHS):
+    for epoch in range(cfg.EPOCHS):
         # Train
         train_metrics = train_epoch(
             model, loaders['train'], criterion, optimizer, device, epoch
@@ -196,31 +204,33 @@ def main(args):
             'epoch': epoch + 1,
             'lr': current_lr,
             'train_loss': train_metrics['loss'],
-            'train_l1': train_metrics['l1'],
+            'train_mse': train_metrics['mse'],
+            'train_mae': train_metrics['mae'],
             'val_loss': val_metrics['loss'],
-            'val_l1': val_metrics['l1']
+            'val_mse': val_metrics['mse'],
+            'val_mae': val_metrics['mae']
         }
         log_data.append(log_entry)
 
         # Print summary
-        print(f"\nEpoch {epoch + 1}/{EPOCHS}")
+        print(f"\nEpoch {epoch + 1}/{cfg.EPOCHS}")
         print(f"  LR: {current_lr:.6f}")
-        print(f"  Train - Loss: {train_metrics['loss']:.4f}, L1: {train_metrics['l1']:.4f}")
-        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, L1: {val_metrics['l1']:.4f}")
+        print(f"  Train - Loss: {train_metrics['loss']:.4f}, MAE: {train_metrics['mae']:.4f}")
+        print(f"  Val   - Loss: {val_metrics['loss']:.4f}, MAE: {val_metrics['mae']:.4f}")
 
         # Save checkpoint
         checkpoint_path = os.path.join(cfg.CHECKPOINT_DIR, f"model_epoch_{epoch + 1:03d}.pt")
         save_checkpoint(model, optimizer, epoch, val_metrics, checkpoint_path)
 
-        # Early stopping based on loss score
-        if val_metrics['l1'] < best_l1:
-            best_l1 = val_metrics['l1']
+        # Early stopping
+        if val_metrics['loss'] < best_loss:
+            best_loss = val_metrics['loss']
             patience_counter = 0
 
             # Save best model
             best_path = os.path.join(cfg.CHECKPOINT_DIR, "model_best.pt")
             save_checkpoint(model, optimizer, epoch, val_metrics, best_path)
-            print(f"  ★ New best L1: {best_l1:.4f}")
+            print(f"  ★ New best loss: {best_loss:.4f}")
         else:
             patience_counter += 1
             print(f"  Patience: {patience_counter}/{patience}")
@@ -238,24 +248,8 @@ def main(args):
     log_df.to_csv(log_path, index=False)
     print(f"\nTraining log saved to: {log_path}")
 
-    print(f"\n Training complete! Best val L1: {best_l1:.4f}")
+    print(f"\nTraining complete! Best val loss: {best_loss:.4f}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train ConvLSTM inpainting model")
-    parser.add_argument('--index_csv', type=str, default=cfg.INDEX_CSV, help='Path to index CSV')
-    parser.add_argument('--data_root', type=str, default=cfg.DATA_ROOT, help='Data root directory')
-    parser.add_argument('--batch_size', type=int, default=cfg.BATCH_SIZE, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=cfg.EPOCHS, help='Number of epochs')
-    parser.add_argument('--lr', type=float, default=cfg.LR, help='Learning rate')
-
-    args = parser.parse_args()
-
-    # Update globals from args
-    INDEX_CSV = args.index_csv
-    DATA_ROOT = args.data_root
-    BATCH_SIZE = args.batch_size
-    EPOCHS = args.epochs
-    LR = args.lr
-
-    main(args)
+    main()

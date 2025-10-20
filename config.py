@@ -10,7 +10,7 @@ DATA_ROOT = "data/raw"
 OUTPUT_DIR = "data/outputs"
 
 # ===== DATA PARAMS =====
-PATCH_SIZE = 128  # Fits well in 250x250 images
+PATCH_SIZE = 128  # Fits well in 200x200 images
 STRIDE = 64       # 50% overlap for evaluation
 
 # Temporal settings
@@ -20,15 +20,18 @@ MAX_GAP_DAYS = 7     # Maximum gap between frames
 
 # Cloud filtering
 MAX_TARGET_CLOUD_COVERAGE = 0.95  # Discard targets >95% cloudy
-MIN_WATER_PIXELS = 2000  # Minimum visible water (lower for 250x250)
+MIN_WATER_PIXELS = 10
 
 # Synthetic mask generation
-SYNTH_MASK_COVERAGE = (0.10, 0.40)  # 10-40% synthetic cloud coverage
+MIN_BLOOM_COVERAGE = 0.05
+MIN_BLOOM_INTENSITY = 5
+
+PREDICT_HORIZON = 1
 
 # ===== MODEL PARAMS =====
 HIDDEN_DIMS = [32, 32, 32]
 KERNEL_SIZE = 3
-INPUT_CHANNELS = 7  # frame + mask + 5 present_bits
+INPUT_CHANNELS = 2  # frame + present_bits
 
 # ===== TRAINING PARAMS =====
 BATCH_SIZE = 8

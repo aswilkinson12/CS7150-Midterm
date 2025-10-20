@@ -1,7 +1,3 @@
-"""
-ConvLSTM model for HAB cloud inpainting.
-"""
-
 import torch
 import torch.nn as nn
 
@@ -80,7 +76,7 @@ class ConvLSTM(nn.Module):
 class HABInpaintModel(nn.Module):
     """ConvLSTM for HAB inpainting."""
 
-    def __init__(self, input_channels=8, hidden_dims=[32, 32, 32], kernel_size=3):
+    def __init__(self, input_channels=2, hidden_dims=[32, 32, 32], kernel_size=3):
         super().__init__()
 
         self.convlstm = ConvLSTM(input_channels, hidden_dims, kernel_size)
