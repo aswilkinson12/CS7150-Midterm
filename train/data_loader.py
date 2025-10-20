@@ -52,12 +52,12 @@ class SatelliteSequenceDataset(Dataset):
         return frames, target
 
     def _load_image(self, path):
-        img = Image.open(path).convert("RGB")
-        arr = np.array(img, dtype=np.float32) / 255.0  # normalize [0,1]
+        img = Image.open(path).convert("RGB").resize((256, 256))
+        arr = np.array(img, dtype=np.float32) / 255.0
         return arr
 
 
-def get_dataloader(data_dir, batch_size=4, seq_len=7, shuffle=True, num_workers=4):
+def get_dataloader(data_dir, batch_size=4, seq_len=7, shuffle=True, num_workers=0):
     dataset = SatelliteSequenceDataset(data_dir, seq_len=seq_len)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
     return loader

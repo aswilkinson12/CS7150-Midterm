@@ -24,8 +24,8 @@ class ConvLSTMCell(nn.Module):
         )
     
     # update the cell state and hidden state using four gates
-    def forward(self, input, state_t):
-        hidden_t, cell_t = state_t
+    def forward(self, input, cur_state):
+        hidden_t, cell_t = cur_state
 
         xh = torch.cat([input, hidden_t], dim=1) # concatenate the input and the hidden state along channel
 
@@ -37,18 +37,18 @@ class ConvLSTMCell(nn.Module):
         i = torch.sigmoid(i_gate)
         f = torch.sigmoid(f_gate)
         o = torch.sigmoid(o_gate)
-        g = torch.sigmoid(g_gate)
+        g = torch.tanh(g_gate)
 
         cell_t_ = f * cell_t + i * g # update cell state
         hidden_t_ = o * torch.tanh(cell_t_) # update hidden state
 
-        return cell_t_, hidden_t_
+        return hidden_t_, cell_t_
     
     # initialize the states
     def initialize(self, batch_size, image_size):
         height, width = image_size[0], image_size[1]
         
-        hidden_0 = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device),
+        hidden_0 = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device)
         cell_0 = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device)
 
         return hidden_0, cell_0
@@ -113,7 +113,7 @@ class ConvLSTM(nn.Module):
             layer_output = torch.stack(hidden_output, dim=1) # stack hidden output along time
             cur_layer_input = layer_output # pass output to next layer
 
-            layer_outputs.append(layer_outputs)
+            layer_outputs.append(layer_output)
             last_states.append([hidden, cell])
 
             # return only final layer if specified
@@ -127,6 +127,23 @@ class ConvLSTM(nn.Module):
     def initialize(self, batch_size, image_size):
         states = []
         for i in range(self.n_layers):
-            states.append(self.cells[i].init_hidden(batch_size, image_size))
+            states.append(self.cells[i].initialize(batch_size, image_size))
         return states
 
+class ConvLSTM_Predictor(nn.Module):
+    def __init__(self, input_dim=3, hidden_dim=32, kernel_size=(3,3), n_layers=2):
+        super().__init__()
+        self.encoder = ConvLSTM(input_dim, hidden_dim, kernel_size, n_layers)
+        self.decoder = nn.Sequential(
+            nn.Conv2d(hidden_dim, hidden_dim // 2, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(hidden_dim // 2, 3, 1),  # back to RGB
+            nn.Sigmoid()                      # normalize to [0,1]
+        )
+
+    def forward(self, x):
+        outputs, _ = self.encoder(x)     # outputs: list of [T, B, hidden, H, W]
+        last_layer_output = outputs[-1]  # last layer: [T, B, hidden, H, W]
+        last_timestep = last_layer_output[-1]  # last time step: [B, hidden, H, W]
+        y_pred = self.decoder(last_timestep)
+        return y_pred
