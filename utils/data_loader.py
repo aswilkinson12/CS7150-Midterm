@@ -57,7 +57,7 @@ class HABPredictionDataset(Dataset):
         print(f"[{split}] {len(self.samples)} samples")
 
     def _build_samples(self):
-        """Build prediction samples with temporal sequences."""
+        """Build prediction samples with BALANCED intensity distribution."""
         samples = []
         dates_dict = dict(zip(self.index['date'], self.index['path']))
 
@@ -65,6 +65,7 @@ class HABPredictionDataset(Dataset):
         skipped_bloom = 0
         skipped_weak = 0
         skipped_gaps = 0
+
 
         for idx, row in self.index.iterrows():
             target_date = row['date']
@@ -107,7 +108,7 @@ class HABPredictionDataset(Dataset):
             present_bits = []
             has_large_gap = False
 
-            for offset in range(-cfg.LOOKBACK, 0):  # -5, -4, -3, -2, -1
+            for offset in range(-cfg.LOOKBACK, 0):
                 neighbor_date = target_date + timedelta(days=offset)
 
                 if neighbor_date in dates_dict:
@@ -145,12 +146,14 @@ class HABPredictionDataset(Dataset):
                 skipped_gaps += 1
                 continue
 
-            samples.append({
+            sample_dict = {
                 'target_path': target_path,
                 'target_date': target_date,
                 'neighbors': neighbors,
-                'present_bits': present_bits
-            })
+                'present_bits': present_bits,
+            }
+
+            samples.append(sample_dict)
 
         # Print summary
         if self.split == 'train':

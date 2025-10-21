@@ -9,8 +9,9 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import pandas as pd
 from tqdm import tqdm
 import config as cfg
+from loss_v2 import IntensityWeightedMSELoss
 
-from models.convlstm import HABInpaintModel  # Model stays the same!
+from models.convlstm_v2 import HABPredictionModelV2 as HABInpaintModel
 from utils.data_loader import create_dataloaders
 from losses import WaterMaskedMSELoss
 
@@ -162,7 +163,7 @@ def main():
     print(f"Model parameters: {n_params:,}")
 
     # Create loss function
-    criterion = WaterMaskedMSELoss()
+    criterion = IntensityWeightedMSELoss(weight_power=0.8)
 
     # Create optimizer
     optimizer = optim.Adam(

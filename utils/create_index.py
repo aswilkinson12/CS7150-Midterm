@@ -51,8 +51,8 @@ df = df.sort_values('date').reset_index(drop=True)
 
 # Create splits (70/15/15)
 n = len(df)
-train_end = int(0.7 * n)
-val_end = int(0.85 * n)
+train_end = int(0.8 * n)
+val_end = int(0.90 * n)
 
 df['split'] = 'test'
 df.loc[:train_end, 'split'] = 'train'

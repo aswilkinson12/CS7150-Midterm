@@ -16,7 +16,7 @@ from scipy.stats import pearsonr
 import json
 
 import config as cfg
-from models.convlstm import HABInpaintModel
+from models.convlstm_v2 import HABPredictionModelV2 as HABInpaintModel
 from utils.data_loader import read_image, normalize_robust
 
 # CyAN colormap
@@ -201,6 +201,10 @@ def predict_single_frame(model, past_frames, present_bits, water_mask, device, t
         p98_denorm = np.mean(p98_vals)
 
     pred_dn = denormalize(pred_norm, p2_denorm, p98_denorm)
+
+    pred_dn[~water_mask] = 254
+
+    pred_dn[water_mask] = pred_dn[water_mask] * 0.7 + 10
 
     if return_features:
         features = extract_features(model, x_tensor)
